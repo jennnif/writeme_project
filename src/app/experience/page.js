@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import Navigation from '../../components/Navigation'
@@ -10,6 +10,30 @@ export default function Experience() {
     { id: 1, title: '', description: '', category: 'work' }
   ])
   const [selectedTone, setSelectedTone] = useState('논리적')
+
+  // 컴포넌트 마운트시 저장된 데이터 불러오기
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      // 이전 분석 결과에서 톤 가져오기
+      const analysisData = localStorage.getItem('writeme_analysis')
+      if (analysisData) {
+        const analysis = JSON.parse(analysisData)
+        setSelectedTone(analysis.toneResult || '논리적')
+      }
+      
+      // 저장된 경험 데이터 불러오기
+      const experienceData = localStorage.getItem('writeme_experiences')
+      if (experienceData) {
+        const savedData = JSON.parse(experienceData)
+        if (savedData.experiences && savedData.experiences.length > 0) {
+          setExperiences(savedData.experiences.map((exp, index) => ({
+            ...exp,
+            id: index + 1
+          })))
+        }
+      }
+    }
+  }, [])
 
   const tones = [
     { name: '논리적', description: '체계적이고 분석적인 스타일', color: 'bg-blue-100 text-blue-700' },
@@ -49,11 +73,42 @@ export default function Experience() {
     }
   }
 
-  const generateContent = () => {
-    // AI 생성 로직 (더미)
+  const generateContent = async () => {
+    // AI 생성 로직 + 데이터 저장
     console.log('경험 데이터:', experiences)
     console.log('선택된 톤:', selectedTone)
-    // 결과 페이지로 이동
+    
+    try {
+      // 브라우저 환경에서만 실행
+      if (typeof window !== 'undefined' && window.localStorage) {
+        // 경험 데이터 저장
+        localStorage.setItem('writeme_experiences', JSON.stringify({
+          experiences: experiences.filter(exp => exp.title.trim() || exp.description.trim()),
+          selectedTone,
+          timestamp: new Date().toISOString()
+        }))
+        
+        // 이전 분석 결과 불러오기
+        const analysisData = localStorage.getItem('writeme_analysis')
+        const analysis = analysisData ? JSON.parse(analysisData) : null
+        
+        // 생성된 문서 데이터 저장
+        const generatedData = {
+          documentId: `doc_${Date.now()}`,
+          tone: selectedTone,
+          personalityAnalysis: analysis,
+          experiences: experiences.filter(exp => exp.title.trim() || exp.description.trim()),
+          createdAt: new Date().toISOString(),
+          status: 'complete'
+        }
+        
+        localStorage.setItem('writeme_latest_document', JSON.stringify(generatedData))
+        
+        console.log('데이터 저장 완료')
+      }
+    } catch (error) {
+      console.error('데이터 저장 중 오류:', error)
+    }
   }
 
   return (

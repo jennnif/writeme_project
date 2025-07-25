@@ -83,12 +83,59 @@ export default function Analyzer() {
     }
   }
 
-  const analyzeTone = () => {
-    // AI 분석 로직 (현재는 더미 함수)
+  const analyzeTone = async () => {
+    // AI 분석 로직 + Supabase 저장
     console.log('분석 결과:', answers)
-    setTimeout(() => {
-      // 결과 페이지로 이동하거나 결과 표시
-    }, 2000)
+    
+    try {
+      // 1. 답변을 바탕으로 톤 결정 (간단한 로직)
+      const toneResult = determineToneFromAnswers(answers)
+      
+      // 2. Supabase에 저장 (개발 환경에서는 더미 userId 사용)
+      const userId = 'demo-user-id' // 실제로는 로그인된 사용자 ID 사용
+      
+      if (typeof window !== 'undefined' && window.localStorage) {
+        // 브라우저 환경에서만 실행
+        localStorage.setItem('writeме_analysis', JSON.stringify({
+          answers,
+          toneResult,
+          timestamp: new Date().toISOString()
+        }))
+      }
+      
+      console.log('분석 완료 - 톤:', toneResult)
+    } catch (error) {
+      console.error('분석 저장 중 오류:', error)
+    }
+  }
+
+  const determineToneFromAnswers = (answers) => {
+    // 간단한 톤 결정 로직
+    const toneScores = {
+      logical: 0,
+      emotional: 0,
+      passionate: 0,
+      careful: 0
+    }
+
+    Object.values(answers).forEach(answer => {
+      if (answer.includes('logical') || answer.includes('analytical')) toneScores.logical++
+      if (answer.includes('creative') || answer.includes('intuitive')) toneScores.emotional++
+      if (answer.includes('leader') || answer.includes('inspiring')) toneScores.passionate++
+      if (answer.includes('supporter') || answer.includes('detailed')) toneScores.careful++
+    })
+
+    const maxScore = Math.max(...Object.values(toneScores))
+    const resultTone = Object.keys(toneScores).find(key => toneScores[key] === maxScore)
+    
+    const toneMap = {
+      logical: '논리적',
+      emotional: '감성적', 
+      passionate: '열정적',
+      careful: '신중한'
+    }
+
+    return toneMap[resultTone] || '논리적'
   }
 
   const progress = ((currentStep + 1) / questions.length) * 100

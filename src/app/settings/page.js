@@ -1,15 +1,89 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import Navigation from '../../components/Navigation'
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('history')
+  const [historyData, setHistoryData] = useState([])
+  const [tonePresets, setTonePresets] = useState([])
 
-  // 더미 히스토리 데이터
-  const historyData = [
+  // 컴포넌트 마운트시 저장된 데이터 불러오기
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      // 문서 히스토리 불러오기
+      const latestDoc = localStorage.getItem('writeme_latest_document')
+      if (latestDoc) {
+        const doc = JSON.parse(latestDoc)
+        setHistoryData([{
+          id: doc.documentId || 1,
+          date: new Date(doc.createdAt).toLocaleDateString('ko-KR'),
+          tone: doc.tone,
+          type: doc.status,
+          title: `${doc.tone} 톤 문서`,
+          status: doc.status === 'complete' ? '완료' : '임시저장'
+        }])
+      }
+
+      // 톤 프리셋 데이터 초기화
+      loadTonePresets()
+    }
+  }, [])
+
+  const loadTonePresets = () => {
+    // localStorage에서 사용된 톤들을 분석해서 프리셋으로 표시
+    const analysisData = localStorage.getItem('writeme_analysis')
+    const experienceData = localStorage.getItem('writeme_experiences')
+    
+    const defaultPresets = [
+      { 
+        name: '논리적', 
+        description: '체계적이고 분석적인 접근',
+        color: 'bg-blue-100 text-blue-700',
+        count: 0
+      },
+      { 
+        name: '감성적', 
+        description: '따뜻하고 공감적인 스타일',
+        color: 'bg-pink-100 text-pink-700',
+        count: 0
+      },
+      { 
+        name: '열정적', 
+        description: '역동적이고 에너지 넘치는 표현',
+        color: 'bg-orange-100 text-orange-700',
+        count: 0
+      },
+      { 
+        name: '신중한', 
+        description: '차분하고 안정적인 어조',
+        color: 'bg-green-100 text-green-700',
+        count: 0
+      }
+    ]
+
+    // 실제 사용된 톤이 있으면 카운트 증가
+    if (analysisData) {
+      const analysis = JSON.parse(analysisData)
+      const usedTone = analysis.toneResult
+      const preset = defaultPresets.find(p => p.name === usedTone)
+      if (preset) preset.count = 1
+    }
+
+    if (experienceData) {
+      const experience = JSON.parse(experienceData)
+      const usedTone = experience.selectedTone
+      const preset = defaultPresets.find(p => p.name === usedTone)
+      if (preset) preset.count = Math.max(preset.count, 1)
+    }
+
+    setTonePresets(defaultPresets)
+  }
+
+  // 더미 히스토리 데이터 (기본값)
+  const fallbackHistoryData = [
     {
       id: 1,
       date: '2024-01-15',
@@ -36,7 +110,7 @@ export default function Settings() {
     }
   ]
 
-  const tonePresets = [
+  const fallbackTonePresets = [
     { 
       name: '논리적', 
       description: '체계적이고 분석적인 접근',
@@ -158,7 +232,7 @@ export default function Settings() {
                 </div>
 
                 <div className="space-y-4">
-                  {historyData.map((item, index) => (
+                  {(historyData.length > 0 ? historyData : fallbackHistoryData).map((item, index) => (
                     <motion.div
                       key={item.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -215,7 +289,7 @@ export default function Settings() {
                 <h3 className="text-xl font-semibold text-gray-900">저장된 톤 프리셋</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {tonePresets.map((preset, index) => (
+                  {(tonePresets.length > 0 ? tonePresets : fallbackTonePresets).map((preset, index) => (
                     <motion.div
                       key={preset.name}
                       initial={{ opacity: 0, y: 20 }}
