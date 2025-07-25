@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import Navigation from '../../components/Navigation'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
 const questions = [
   {
@@ -176,8 +177,9 @@ export default function Analyzer() {
   const currentAnswer = answers[currentQuestion.id]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      <Navigation />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <Navigation />
       
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-12">
         {/* Progress Bar */}
@@ -270,5 +272,6 @@ export default function Analyzer() {
         </div>
       </div>
     </div>
+  </ProtectedRoute>
   )
 } 

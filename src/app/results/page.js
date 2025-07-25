@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import Navigation from '../../components/Navigation'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
 export default function Results() {
   const [activeTab, setActiveTab] = useState('resume')
@@ -288,8 +289,9 @@ GitHub: github.com/hayeonkim
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      <Navigation />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <Navigation />
       
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         {/* Header */}
@@ -474,5 +476,6 @@ GitHub: github.com/hayeonkim
         </motion.div>
       </div>
     </div>
+    </ProtectedRoute>
   )
 } 

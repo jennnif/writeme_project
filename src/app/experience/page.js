@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import Navigation from '../../components/Navigation'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
 export default function Experience() {
   const [experiences, setExperiences] = useState([
@@ -112,8 +113,9 @@ export default function Experience() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      <Navigation />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <Navigation />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -265,5 +267,6 @@ export default function Experience() {
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   )
 } 

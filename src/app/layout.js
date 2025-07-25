@@ -1,5 +1,7 @@
 import { Noto_Sans_KR, Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "../contexts/AuthContext";
+import WelcomeModal from "../components/WelcomeModal";
 
 const notoSansKR = Noto_Sans_KR({
   variable: "--font-noto-sans-kr",
@@ -23,7 +25,10 @@ export default function RootLayout({ children }) {
       <body
         className={`${notoSansKR.variable} ${inter.variable} antialiased font-noto-sans-kr`}
       >
-        {children}
+        <AuthProvider>
+          {children}
+          <WelcomeModal />
+        </AuthProvider>
       </body>
     </html>
   );

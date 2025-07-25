@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import Navigation from '../../components/Navigation'
+import ProtectedRoute from '../../components/ProtectedRoute'
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('history')
@@ -155,8 +156,9 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      <Navigation />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <Navigation />
       
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         {/* Header */}
@@ -404,5 +406,6 @@ export default function Settings() {
         </motion.div>
       </div>
     </div>
+    </ProtectedRoute>
   )
 } 
