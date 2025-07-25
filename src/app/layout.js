@@ -2,6 +2,7 @@ import { Noto_Sans_KR, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../contexts/AuthContext";
 import WelcomeModal from "../components/WelcomeModal";
+import RandomQuestionModal from "../components/RandomQuestionModal";
 
 const notoSansKR = Noto_Sans_KR({
   variable: "--font-noto-sans-kr",
@@ -28,6 +29,7 @@ export default function RootLayout({ children }) {
         <AuthProvider>
           {children}
           <WelcomeModal />
+          <RandomQuestionModal />
         </AuthProvider>
       </body>
     </html>

@@ -19,6 +19,7 @@ export default function Navigation() {
     { href: '/analyzer', label: '나 분석하기' },
     { href: '/experience', label: '경험 입력' },
     { href: '/results', label: 'AI 결과' },
+    { href: '/interview', label: 'AI 면접' },
     { href: '/settings', label: '설정' },
   ] : [
     { href: '/', label: '홈' },
