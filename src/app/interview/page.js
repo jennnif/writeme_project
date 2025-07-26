@@ -281,39 +281,25 @@ ${structureCount >= 1 ? '구조화된 답변으로 이해하기 쉽습니다.' :
               </ul>
             </div>
 
-            {/* AI 엔진 선택 */}
-            <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-medium text-purple-900">🤖 AI 엔진 선택</h4>
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="aiEngine"
-                      checked={useGeminiAI}
-                      onChange={() => setUseGeminiAI(true)}
-                      className="text-purple-600"
-                    />
-                    <span className="text-sm font-medium text-purple-700">Gemini 2.5 Flash-Lite</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="aiEngine"
-                      checked={!useGeminiAI}
-                      onChange={() => setUseGeminiAI(false)}
-                      className="text-blue-600"
-                    />
-                    <span className="text-sm font-medium text-blue-700">기본 AI</span>
-                  </label>
+            {/* AI 설정 */}
+            <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-purple-900 mb-1">🤖 AI 분석 설정</h3>
+                  <p className="text-sm text-purple-700">
+                    {useGeminiAI ? 'Gemini 2.5 Flash-Lite AI가 실시간으로 분석합니다' : '기본 AI 분석을 사용합니다'}
+                  </p>
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useGeminiAI}
+                    onChange={(e) => setUseGeminiAI(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
               </div>
-              <p className="text-xs text-purple-600">
-                {useGeminiAI 
-                  ? '🚀 실시간 음성 분석과 고급 피드백을 제공합니다' 
-                  : '⚡ 빠른 기본 분석을 제공합니다'
-                }
-              </p>
             </div>
 
             {/* 테스트용 수동 입력 - 개발 환경에서만 표시 */}
@@ -336,7 +322,7 @@ ${structureCount >= 1 ? '구조화된 답변으로 이해하기 쉽습니다.' :
             <VoiceRecorder
               onTranscriptChange={handleTranscriptChange}
               onRecordingComplete={handleRecordingComplete}
-              onAIAnalysis={useGeminiAI ? handleGeminiAnalysis : null}
+              onAIAnalysis={useGeminiAI ? handleGeminiAnalysis : undefined}
             />
 
             {/* 버튼들 */}
@@ -436,6 +422,35 @@ ${structureCount >= 1 ? '구조화된 답변으로 이해하기 쉽습니다.' :
                     {aiFeedback.specific_feedback}
                   </p>
                 </div>
+
+                {/* Gemini AI 추가 정보 */}
+                {geminiAnalysis && !geminiAnalysis.error && (
+                  <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <h4 className="font-medium text-purple-900 mb-3">🤖 Gemini AI 상세 분석</h4>
+                    
+                    {aiFeedback.tone_analysis && (
+                      <div className="mb-3">
+                        <span className="text-sm font-medium text-purple-700">말투 분석: </span>
+                        <span className="text-purple-600 text-sm">{aiFeedback.tone_analysis}</span>
+                      </div>
+                    )}
+                    
+                    {aiFeedback.ai_confidence && (
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between text-xs text-purple-600 mb-1">
+                          <span>AI 신뢰도</span>
+                          <span>{Math.round(aiFeedback.ai_confidence * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-purple-200 rounded-full h-1.5">
+                          <div 
+                            className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                            style={{ width: `${aiFeedback.ai_confidence * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 강점 */}
                 <div className="mb-6">
