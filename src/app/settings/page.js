@@ -2,410 +2,259 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import Link from 'next/link'
 import Navigation from '../../components/Navigation'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import { useAuth } from '../../contexts/AuthContext'
+import { supabase } from '../../lib/supabase'
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState('history')
-  const [historyData, setHistoryData] = useState([])
-  const [tonePresets, setTonePresets] = useState([])
+  const { user, getUserProfile } = useAuth()
+  const [activeTab, setActiveTab] = useState('profile')
+  const [userProfile, setUserProfile] = useState(null)
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    email: '',
+    phone: ''
+  })
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [updateSuccess, setUpdateSuccess] = useState(false)
+  const [updateError, setUpdateError] = useState('')
 
-  // 컴포넌트 마운트시 저장된 데이터 불러오기
+  // 사용자 프로필 정보 로드
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      // 문서 히스토리 불러오기
-      const latestDoc = localStorage.getItem('writeme_latest_document')
-      if (latestDoc) {
-        const doc = JSON.parse(latestDoc)
-        setHistoryData([{
-          id: doc.documentId || 1,
-          date: new Date(doc.createdAt).toLocaleDateString('ko-KR'),
-          tone: doc.tone,
-          type: doc.status,
-          title: `${doc.tone} 톤 문서`,
-          status: doc.status === 'complete' ? '완료' : '임시저장'
-        }])
+    const loadUserProfile = async () => {
+      if (user && getUserProfile) {
+        console.log('Settings: 프로필 로딩 시작, user:', user.email)
+        try {
+          const profile = await getUserProfile()
+          console.log('Settings: 프로필 로딩 결과:', profile)
+          
+          if (profile) {
+            setUserProfile(profile)
+            setProfileForm({
+              name: profile.name || '',
+              email: profile.email || user.email || '',
+              phone: profile.phone || ''
+            })
+          } else {
+            // 프로필이 없으면 기본 사용자 정보로 fallback
+            console.log('Settings: 프로필이 없어서 fallback 사용')
+            const fallbackProfile = {
+              id: user.id,
+              email: user.email,
+              name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+              phone: null
+            }
+            setUserProfile(fallbackProfile)
+            setProfileForm({
+              name: fallbackProfile.name,
+              email: fallbackProfile.email,
+              phone: fallbackProfile.phone || ''
+            })
+          }
+        } catch (error) {
+          console.error('Settings: 프로필 로딩 오류:', error)
+          // 오류 발생시에도 fallback 사용
+          const fallbackProfile = {
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+            phone: null
+          }
+          setUserProfile(fallbackProfile)
+          setProfileForm({
+            name: fallbackProfile.name,
+            email: fallbackProfile.email,
+            phone: fallbackProfile.phone || ''
+          })
+        }
       }
-
-      // 톤 프리셋 데이터 초기화
-      loadTonePresets()
     }
-  }, [])
+    loadUserProfile()
+  }, [user, getUserProfile])
 
-  const loadTonePresets = () => {
-    // localStorage에서 사용된 톤들을 분석해서 프리셋으로 표시
-    const analysisData = localStorage.getItem('writeme_analysis')
-    const experienceData = localStorage.getItem('writeme_experiences')
-    
-    const defaultPresets = [
-      { 
-        name: '논리적', 
-        description: '체계적이고 분석적인 접근',
-        color: 'bg-blue-100 text-blue-700',
-        count: 0
-      },
-      { 
-        name: '감성적', 
-        description: '따뜻하고 공감적인 스타일',
-        color: 'bg-pink-100 text-pink-700',
-        count: 0
-      },
-      { 
-        name: '열정적', 
-        description: '역동적이고 에너지 넘치는 표현',
-        color: 'bg-orange-100 text-orange-700',
-        count: 0
-      },
-      { 
-        name: '신중한', 
-        description: '차분하고 안정적인 어조',
-        color: 'bg-green-100 text-green-700',
-        count: 0
-      }
-    ]
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault()
+    setIsUpdating(true)
+    setUpdateError('')
+    setUpdateSuccess(false)
 
-    // 실제 사용된 톤이 있으면 카운트 증가
-    if (analysisData) {
-      const analysis = JSON.parse(analysisData)
-      const usedTone = analysis.toneResult
-      const preset = defaultPresets.find(p => p.name === usedTone)
-      if (preset) preset.count = 1
-    }
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          name: profileForm.name,
+          phone: profileForm.phone,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
 
-    if (experienceData) {
-      const experience = JSON.parse(experienceData)
-      const usedTone = experience.selectedTone
-      const preset = defaultPresets.find(p => p.name === usedTone)
-      if (preset) preset.count = Math.max(preset.count, 1)
-    }
+      if (error) throw error
 
-    setTonePresets(defaultPresets)
-  }
-
-  // 더미 히스토리 데이터 (기본값)
-  const fallbackHistoryData = [
-    {
-      id: 1,
-      date: '2024-01-15',
-      tone: '논리적',
-      type: 'complete',
-      title: '백엔드 개발자 지원용',
-      status: '완료'
-    },
-    {
-      id: 2,
-      date: '2024-01-10',
-      tone: '열정적',
-      type: 'draft',
-      title: '스타트업 마케터 지원용',
-      status: '임시저장'
-    },
-    {
-      id: 3,
-      date: '2024-01-05',
-      tone: '감성적',
-      type: 'complete',
-      title: '교육 분야 지원용',
-      status: '완료'
-    }
-  ]
-
-  const fallbackTonePresets = [
-    { 
-      name: '논리적', 
-      description: '체계적이고 분석적인 접근',
-      color: 'bg-blue-100 text-blue-700',
-      count: 3
-    },
-    { 
-      name: '감성적', 
-      description: '따뜻하고 공감적인 스타일',
-      color: 'bg-pink-100 text-pink-700',
-      count: 2
-    },
-    { 
-      name: '열정적', 
-      description: '역동적이고 에너지 넘치는 표현',
-      color: 'bg-orange-100 text-orange-700',
-      count: 1
-    },
-    { 
-      name: '신중한', 
-      description: '차분하고 안정적인 어조',
-      color: 'bg-green-100 text-green-700',
-      count: 0
-    }
-  ]
-
-  const regenerateDocument = (id) => {
-    console.log('문서 재생성:', id)
-    alert('문서를 재생성합니다.')
-  }
-
-  const deleteDocument = (id) => {
-    console.log('문서 삭제:', id)
-    if (confirm('정말 삭제하시겠습니까?')) {
-      alert('문서가 삭제되었습니다.')
+      setUpdateSuccess(true)
+      setTimeout(() => setUpdateSuccess(false), 3000)
+    } catch (error) {
+      console.error('프로필 업데이트 오류:', error)
+      setUpdateError('프로필 업데이트 중 오류가 발생했습니다.')
+    } finally {
+      setIsUpdating(false)
     }
   }
 
-  const exportData = () => {
-    console.log('데이터 내보내기')
-    alert('데이터를 내보냅니다.')
+  const handleInputChange = (e) => {
+    const { name, value } = e.target
+    setProfileForm(prev => ({
+      ...prev,
+      [name]: value
+    }))
   }
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
         <Navigation />
-      
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
-        >
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">설정 및 히스토리</h1>
-          <p className="text-lg text-gray-600">이전 문서들을 관리하고 설정을 변경해보세요</p>
-        </motion.div>
+        
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center mb-8"
+          >
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">설정</h1>
+            <p className="text-lg text-gray-600">프로필 정보와 앱 설정을 관리하세요</p>
+          </motion.div>
 
-        {/* Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-2xl shadow-lg overflow-hidden"
-        >
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-8">
+          {/* Tabs */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="border-b border-gray-200 mb-8"
+          >
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'profile'
+                    ? 'border-indigo-500 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                프로필 정보
+              </button>
               <button
                 onClick={() => setActiveTab('history')}
-                className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'history'
                     ? 'border-indigo-500 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                📚 히스토리
-              </button>
-              <button
-                onClick={() => setActiveTab('presets')}
-                className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'presets'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                🎨 톤 프리셋
-              </button>
-              <button
-                onClick={() => setActiveTab('settings')}
-                className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === 'settings'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                ⚙️ 설정
+                생성 이력
               </button>
             </nav>
-          </div>
+          </motion.div>
 
           {/* Tab Content */}
-          <div className="p-8">
-            {/* History Tab */}
+          <div className="space-y-6">
+            {activeTab === 'profile' && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="bg-white rounded-2xl shadow-lg p-8"
+              >
+                <h3 className="text-xl font-semibold text-gray-900 mb-6">프로필 정보 수정</h3>
+                
+                {updateSuccess && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-green-700 text-sm">프로필이 성공적으로 업데이트되었습니다!</p>
+                  </div>
+                )}
+                
+                {updateError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-700 text-sm">{updateError}</p>
+                  </div>
+                )}
+
+                <form onSubmit={handleProfileUpdate} className="space-y-6">
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                      이름
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      value={profileForm.name}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="이름을 입력하세요"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                      이메일
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={profileForm.email}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+                      placeholder="이메일 주소"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">이메일은 로그인 정보로 변경할 수 없습니다.</p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+                      연락처
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      name="phone"
+                      value={profileForm.phone}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="010-1234-5678"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isUpdating}
+                      className="px-6 py-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isUpdating ? '업데이트 중...' : '저장하기'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            )}
+
             {activeTab === 'history' && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-6"
+                className="bg-white rounded-2xl shadow-lg p-8"
               >
-                <div className="flex justify-between items-center">
-                  <h3 className="text-xl font-semibold text-gray-900">생성 히스토리</h3>
-                  <button
-                    onClick={exportData}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
-                  >
-                    데이터 내보내기
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {(historyData.length > 0 ? historyData : fallbackHistoryData).map((item, index) => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="p-6 border border-gray-200 rounded-xl hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="text-lg font-semibold text-gray-900">{item.title}</h4>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              item.status === '완료' 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-yellow-100 text-yellow-700'
-                            }`}>
-                              {item.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span>📅 {item.date}</span>
-                            <span>🎨 {item.tone} 톤</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => regenerateDocument(item.id)}
-                            className="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium"
-                          >
-                            재생성
-                          </button>
-                          <button
-                            onClick={() => deleteDocument(item.id)}
-                            className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-                          >
-                            삭제
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Presets Tab */}
-            {activeTab === 'presets' && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-6"
-              >
-                <h3 className="text-xl font-semibold text-gray-900">저장된 톤 프리셋</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {(tonePresets.length > 0 ? tonePresets : fallbackTonePresets).map((preset, index) => (
-                    <motion.div
-                      key={preset.name}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="p-6 border border-gray-200 rounded-xl hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className={`px-3 py-1 rounded-full text-sm font-medium ${preset.color}`}>
-                          {preset.name}
-                        </div>
-                        <span className="text-sm text-gray-500">{preset.count}회 사용</span>
-                      </div>
-                      <p className="text-gray-600 mb-4">{preset.description}</p>
-                      <div className="flex gap-2">
-                        <Link
-                          href="/analyzer"
-                          className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm font-medium"
-                        >
-                          이 톤으로 생성
-                        </Link>
-                        <button className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium">
-                          편집
-                        </button>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Settings Tab */}
-            {activeTab === 'settings' && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-8"
-              >
-                <h3 className="text-xl font-semibold text-gray-900">환경설정</h3>
-                
-                {/* 알림 설정 */}
-                <div className="p-6 border border-gray-200 rounded-xl">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">알림 설정</h4>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-gray-900">생성 완료 알림</p>
-                        <p className="text-sm text-gray-600">문서 생성이 완료되면 알림을 받습니다</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" defaultChecked />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                      </label>
-                    </div>
-                    
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-gray-900">전문가 첨삭 완료 알림</p>
-                        <p className="text-sm text-gray-600">전문가 첨삭이 완료되면 알림을 받습니다</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" defaultChecked />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 개인정보 설정 */}
-                <div className="p-6 border border-gray-200 rounded-xl">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">개인정보</h4>
-                  <div className="space-y-4">
-                    <button className="w-full px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-left">
-                      개인정보 다운로드
-                    </button>
-                    <button className="w-full px-4 py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-left">
-                      계정 삭제
-                    </button>
-                  </div>
-                </div>
-
-                {/* 앱 정보 */}
-                <div className="p-6 border border-gray-200 rounded-xl">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">앱 정보</h4>
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <p>버전: 1.0.0</p>
-                    <p>최근 업데이트: 2024-01-15</p>
-                    <Link href="#" className="text-indigo-600 hover:text-indigo-700">
-                      이용약관 및 개인정보처리방침
-                    </Link>
-                  </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-6">생성 이력</h3>
+                <div className="text-center py-12 text-gray-500">
+                  <p className="text-lg mb-2">아직 생성된 문서가 없습니다</p>
+                  <p className="text-sm">성격 분석을 시작해서 첫 번째 문서를 생성해보세요!</p>
                 </div>
               </motion.div>
             )}
           </div>
-        </motion.div>
-
-        {/* Bottom Navigation */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="flex justify-center mt-8 mb-16"
-        >
-          <Link
-            href="/"
-            className="px-8 py-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors font-medium"
-          >
-            새로운 문서 생성하기
-          </Link>
-        </motion.div>
+        </div>
       </div>
-    </div>
     </ProtectedRoute>
   )
 } 

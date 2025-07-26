@@ -322,4 +322,50 @@ export async function getUserProfile(userId) {
     console.error('프로필 조회 오류:', error)
     return { success: false, error: error.message }
   }
+}
+
+/**
+ * 사용자 프로필 업데이트
+ */
+export async function updateUserProfile(userId, profileData) {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        name: profileData.name,
+        phone: profileData.phone,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+      .select()
+
+    if (error) throw error
+    return { success: true, data }
+  } catch (error) {
+    console.error('프로필 업데이트 오류:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 사용자 프로필 생성 (회원가입 후 트리거용)
+ */
+export async function createUserProfile(userId, profileData) {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert({
+        id: userId,
+        email: profileData.email,
+        name: profileData.name,
+        phone: profileData.phone || null
+      })
+      .select()
+
+    if (error) throw error
+    return { success: true, data }
+  } catch (error) {
+    console.error('프로필 생성 오류:', error)
+    return { success: false, error: error.message }
+  }
 } 

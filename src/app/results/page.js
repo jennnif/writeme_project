@@ -5,12 +5,53 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 import Navigation from '../../components/Navigation'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function Results() {
+  const { user, getUserProfile } = useAuth()
   const [activeTab, setActiveTab] = useState('resume')
   const [copied, setCopied] = useState(false)
   const [documentData, setDocumentData] = useState(null)
   const [generatedContent, setGeneratedContent] = useState(null)
+  const [userProfile, setUserProfile] = useState(null)
+
+  // 사용자 프로필 정보 로드
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (user && getUserProfile) {
+        console.log('Results: 프로필 로딩 시작, user:', user.email)
+        try {
+          const profile = await getUserProfile()
+          console.log('Results: 프로필 로딩 결과:', profile)
+          
+          if (profile) {
+            setUserProfile(profile)
+          } else {
+            // 프로필이 없으면 기본 사용자 정보로 fallback
+            console.log('Results: 프로필이 없어서 fallback 사용')
+            const fallbackProfile = {
+              id: user.id,
+              email: user.email,
+              name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+              phone: null
+            }
+            setUserProfile(fallbackProfile)
+          }
+        } catch (error) {
+          console.error('Results: 프로필 로딩 오류:', error)
+          // 오류 발생시에도 fallback 사용
+          const fallbackProfile = {
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.name || user.email?.split('@')[0] || 'User', 
+            phone: null
+          }
+          setUserProfile(fallbackProfile)
+        }
+      }
+    }
+    loadUserProfile()
+  }, [user, getUserProfile])
 
   // 저장된 데이터 로드
   useEffect(() => {
@@ -20,23 +61,44 @@ export default function Results() {
         const data = JSON.parse(latestDoc)
         setDocumentData(data)
         
+        console.log('Results: 컨텐츠 생성 시작')
+        console.log('- userProfile:', userProfile)
+        console.log('- user:', user?.email)
+        console.log('- documentData:', data)
+        
         // 데이터를 바탕으로 실제 컨텐츠 생성
-        const content = generateContentFromData(data)
+        const content = generateContentFromData(data, userProfile, user)
         setGeneratedContent(content)
+        
+        console.log('Results: 컨텐츠 생성 완료')
       }
     }
-  }, [])
+  }, [userProfile, user])
 
-  const generateContentFromData = (data) => {
+  const generateContentFromData = (data, userProfile, user) => {
     const { tone, experiences, personalityAnalysis } = data
+    
+    console.log('generateContentFromData 호출됨:')
+    console.log('- userProfile:', userProfile)
+    console.log('- user email:', user?.email)
     
     // 실제 경험 데이터를 바탕으로 컨텐츠 생성
     const workExperiences = experiences?.filter(exp => exp.category === 'work') || []
     const projectExperiences = experiences?.filter(exp => exp.category === 'project') || []
     
-    const resume = `${data.userInfo?.name || '김하연'}
+    // 사용자 정보 우선순위: userProfile > user > fallback
+    const userName = userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || '사용자'
+    const userEmail = userProfile?.email || user?.email || 'user@email.com'
+    const userPhone = userProfile?.phone || '010-0000-0000'
+    
+    console.log('최종 사용자 정보:')
+    console.log('- 이름:', userName)
+    console.log('- 이메일:', userEmail)
+    console.log('- 연락처:', userPhone)
+    
+    const resume = `${userName}
 
-연락처: ${data.userInfo?.email || 'user@email.com'} | ${data.userInfo?.phone || '010-1234-5678'}
+연락처: ${userEmail} | ${userPhone}
 
 ■ 핵심 역량
 ${generateSkillsFromExperiences(experiences, tone)}
@@ -89,9 +151,121 @@ ${experiences?.slice(0, 2).map(exp =>
   }
 
   const generateTechStackFromExperiences = (experiences) => {
-    return experiences?.some(exp => exp.description.includes('개발') || exp.description.includes('프로그래밍')) 
-      ? 'Programming: Python, JavaScript\n• Tools: Git, Figma, Notion'
-      : 'Microsoft Office, Google Workspace\n• 협업: Slack, Notion, Zoom'
+    if (!experiences || experiences.length === 0) {
+      return 'Microsoft Office, Google Workspace\n• 협업: Slack, Notion, Zoom'
+    }
+
+    const techStackPatterns = {
+      // 프로그래밍 언어
+      'programming': {
+        'Python': ['python', '파이썬', 'django', '장고', 'flask', '플라스크'],
+        'JavaScript': ['javascript', '자바스크립트', 'js', 'node', '노드', 'react', '리액트', 'vue', '뷰', 'angular', '앵귤러'],
+        'Java': ['java', '자바', 'spring', '스프링'],
+        'C++': ['c++', 'cpp', 'c플러스'],
+        'C#': ['c#', 'c샵', '.net', 'dotnet'],
+        'Go': ['go', '고', 'golang'],
+        'Rust': ['rust', '러스트'],
+        'TypeScript': ['typescript', '타입스크립트', 'ts'],
+        'PHP': ['php', '피에이치피'],
+        'Ruby': ['ruby', '루비', 'rails', '레일즈'],
+        'Swift': ['swift', '스위프트', 'ios'],
+        'Kotlin': ['kotlin', '코틀린', 'android', '안드로이드'],
+        'Dart': ['dart', '다트', 'flutter', '플러터']
+      },
+      // 프레임워크/라이브러리
+      'frameworks': {
+        'React': ['react', '리액트', 'next.js', '넥스트'],
+        'Vue.js': ['vue', '뷰', 'nuxt'],
+        'Angular': ['angular', '앵귤러'],
+        'Django': ['django', '장고'],
+        'Spring': ['spring', '스프링'],
+        'Express': ['express', '익스프레스'],
+        'Flask': ['flask', '플라스크'],
+        'Laravel': ['laravel', '라라벨'],
+        'Flutter': ['flutter', '플러터']
+      },
+      // 데이터베이스
+      'databases': {
+        'MySQL': ['mysql', '마이에스큐엘'],
+        'PostgreSQL': ['postgresql', '포스트그레스', 'postgres'],
+        'MongoDB': ['mongodb', '몽고db', 'mongo'],
+        'Redis': ['redis', '레디스'],
+        'Oracle': ['oracle', '오라클'],
+        'SQLite': ['sqlite'],
+        'MariaDB': ['mariadb', '마리아db']
+      },
+      // 클라우드/인프라
+      'cloud': {
+        'AWS': ['aws', '아마존', 'amazon web services', 'ec2', 's3', 'lambda'],
+        'Google Cloud': ['gcp', 'google cloud', '구글 클라우드'],
+        'Azure': ['azure', '애저', '에저'],
+        'Docker': ['docker', '도커', 'container', '컨테이너'],
+        'Kubernetes': ['kubernetes', '쿠버네티스', 'k8s'],
+        'Jenkins': ['jenkins', '젠킨스']
+      },
+      // 도구
+      'tools': {
+        'Git': ['git', '깃', 'github', '깃허브', 'gitlab', '깃랩'],
+        'Figma': ['figma', '피그마'],
+        'Adobe': ['photoshop', '포토샵', 'illustrator', '일러스트', 'xd'],
+        'Sketch': ['sketch', '스케치'],
+        'Jira': ['jira', '지라'],
+        'Trello': ['trello', '트렐로'],
+        'Notion': ['notion', '노션'],
+        'Slack': ['slack', '슬랙']
+      }
+    }
+
+    const foundTechs = {
+      programming: new Set(),
+      frameworks: new Set(),
+      databases: new Set(),
+      cloud: new Set(),
+      tools: new Set()
+    }
+
+    // 모든 경험에서 기술 스택 키워드 찾기
+    experiences.forEach(exp => {
+      const content = (exp.title + ' ' + exp.description).toLowerCase()
+      
+      Object.entries(techStackPatterns).forEach(([category, techs]) => {
+        Object.entries(techs).forEach(([techName, keywords]) => {
+          if (keywords.some(keyword => content.includes(keyword))) {
+            foundTechs[category].add(techName)
+          }
+        })
+      })
+    })
+
+    // 결과 문자열 생성
+    let result = []
+    
+    if (foundTechs.programming.size > 0) {
+      result.push(`Programming: ${Array.from(foundTechs.programming).join(', ')}`)
+    }
+    
+    if (foundTechs.frameworks.size > 0) {
+      result.push(`Frameworks: ${Array.from(foundTechs.frameworks).join(', ')}`)
+    }
+    
+    if (foundTechs.databases.size > 0) {
+      result.push(`Database: ${Array.from(foundTechs.databases).join(', ')}`)
+    }
+    
+    if (foundTechs.cloud.size > 0) {
+      result.push(`Cloud/Infra: ${Array.from(foundTechs.cloud).join(', ')}`)
+    }
+    
+    if (foundTechs.tools.size > 0) {
+      result.push(`Tools: ${Array.from(foundTechs.tools).join(', ')}`)
+    }
+
+    // 기술 스택이 하나도 없으면 기본값 반환
+    if (result.length === 0) {
+      return 'Microsoft Office, Google Workspace\n• 협업: Slack, Notion, Zoom'
+    }
+
+    return result.join('\n• ')
   }
 
   const generateMotivationByTone = (tone, experiences) => {
@@ -319,6 +493,22 @@ GitHub: github.com/hayeonkim
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             PDF 다운로드
+          </button>
+          
+          <button
+            onClick={() => {
+              console.log('=== 사용자 정보 확인 ===')
+              console.log('userProfile:', userProfile)
+              console.log('user:', user)
+              console.log('생성된 콘텐츠:', generatedContent)
+              alert(`현재 사용자 정보:\n이름: ${userProfile?.name || '없음'}\n이메일: ${userProfile?.email || user?.email || '없음'}\n연락처: ${userProfile?.phone || '없음'}`)
+            }}
+            className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors font-medium flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            사용자 정보 확인
           </button>
           
           <button

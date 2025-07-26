@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { analyzeTranscriptWithGemini, getRealtimeFeedback } from '../lib/gemini'
 
-export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete }) {
+export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete, onAIAnalysis }) {
   const [isRecording, setIsRecording] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [transcript, setTranscript] = useState('')
@@ -11,6 +12,11 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
   const [error, setError] = useState(null)
   const [recordingTime, setRecordingTime] = useState(0)
   const [volume, setVolume] = useState(0)
+  
+  // Gemini AI 관련 상태
+  const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [realtimeFeedback, setRealtimeFeedback] = useState(null)
 
   const mediaRecorderRef = useRef(null)
   const recognitionRef = useRef(null)
@@ -18,6 +24,7 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
   const timerRef = useRef(null)
   const analyserRef = useRef(null)
   const audioContextRef = useRef(null)
+  const feedbackTimeoutRef = useRef(null)
 
   useEffect(() => {
     // Speech Recognition 설정
@@ -44,9 +51,28 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
         // 임시 텍스트 업데이트
         setInterimTranscript(interimTranscript)
         
-        // 확정된 텍스트 업데이트
+        // 확정된 텍스트 업데이트 및 즉시 상위 컴포넌트에 전달
         if (finalTranscript) {
-          setTranscript(prevTranscript => prevTranscript + finalTranscript)
+          setTranscript(prevTranscript => {
+            const newTranscript = prevTranscript + finalTranscript
+            // 즉시 상위 컴포넌트에 전달
+            setTimeout(() => {
+              onTranscriptChange?.(newTranscript + interimTranscript)
+            }, 0)
+            
+            // Gemini AI 분석 트리거 (완료된 문장에 대해)
+            triggerAIAnalysis(newTranscript)
+            
+            return newTranscript
+          })
+        } else if (interimTranscript) {
+          // 임시 텍스트만 있어도 상위 컴포넌트에 전달
+          setTimeout(() => {
+            onTranscriptChange?.(transcript + interimTranscript)
+          }, 0)
+          
+          // 실시간 피드백 (디바운싱)
+          triggerRealtimeFeedback(transcript + interimTranscript)
         }
       }
 
@@ -79,6 +105,9 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current)
+      }
       // AudioContext 정리는 stopRecording에서 처리
     }
   }, [onTranscriptChange])
@@ -89,7 +118,7 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
     if (fullText) {
       onTranscriptChange?.(fullText)
     }
-  }, [transcript, interimTranscript, onTranscriptChange])
+  }, [transcript, interimTranscript])
 
   // 볼륨 측정
   const setupVolumeMonitoring = (stream) => {
@@ -238,6 +267,45 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
     onTranscriptChange?.('')
   }
 
+  // Gemini AI 분석 트리거 (완료된 문장)
+  const triggerAIAnalysis = async (fullTranscript) => {
+    if (!fullTranscript || fullTranscript.length < 20) return
+    
+    setIsAnalyzing(true)
+    try {
+      const analysis = await analyzeTranscriptWithGemini(fullTranscript, '면접')
+      if (analysis) {
+        setAiAnalysis(analysis)
+        onAIAnalysis?.(analysis)
+        console.log('Gemini 분석 결과:', analysis)
+      }
+    } catch (error) {
+      console.error('AI 분석 오류:', error)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  // 실시간 피드백 트리거 (디바운싱)
+  const triggerRealtimeFeedback = (currentText) => {
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current)
+    }
+    
+    feedbackTimeoutRef.current = setTimeout(async () => {
+      if (currentText && currentText.length > 10) {
+        try {
+          const feedback = await getRealtimeFeedback(currentText)
+          if (feedback) {
+            setRealtimeFeedback(feedback)
+          }
+        } catch (error) {
+          console.error('실시간 피드백 오류:', error)
+        }
+      }
+    }, 2000) // 2초 디바운싱
+  }
+
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6">
       <div className="text-center mb-6">
@@ -252,6 +320,26 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-700 text-sm">{error}</p>
         </div>
+      )}
+
+      {/* 실시간 AI 피드백 */}
+      {realtimeFeedback && isRecording && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 p-3 rounded-lg border-l-4 border-blue-400 bg-blue-50"
+        >
+          <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${
+              realtimeFeedback.status === 'good' ? 'bg-green-500' :
+              realtimeFeedback.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
+            }`} />
+            <p className="text-blue-800 text-sm font-medium">{realtimeFeedback.message}</p>
+          </div>
+          {realtimeFeedback.tip && (
+            <p className="text-blue-600 text-xs mt-1">💡 {realtimeFeedback.tip}</p>
+          )}
+        </motion.div>
       )}
 
       {/* 녹음 컨트롤 */}
@@ -295,6 +383,18 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
           )}
         </motion.button>
 
+        {/* AI 분석 상태 */}
+        {isAnalyzing && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3 flex items-center space-x-2 text-purple-600"
+          >
+            <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-medium">Gemini AI 분석 중...</span>
+          </motion.div>
+        )}
+
         {/* 녹음 시간 */}
         {isRecording && (
           <motion.div
@@ -317,22 +417,130 @@ export default function VoiceRecorder({ onTranscriptChange, onRecordingComplete 
         </p>
       </div>
 
-      {/* 테스트용 버튼 - 개발 환경에서만 표시 */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-          <p className="text-xs text-blue-700 mb-2">개발 테스트용</p>
+      {/* Gemini AI 분석 결과 */}
+      {aiAnalysis && !aiAnalysis.error && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-6 border border-purple-200"
+        >
+          <div className="flex items-center space-x-2 mb-4">
+            <svg className="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <h4 className="font-semibold text-purple-900">🤖 Gemini AI 분석 결과</h4>
+            {aiAnalysis.score && (
+              <span className="ml-auto bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
+                {aiAnalysis.score}점
+              </span>
+            )}
+          </div>
+
+          {aiAnalysis.analysis && (
+            <div className="mb-4">
+              <p className="text-purple-800 leading-relaxed">{aiAnalysis.analysis}</p>
+            </div>
+          )}
+
+          {aiAnalysis.tone && (
+            <div className="mb-3">
+              <span className="text-sm font-medium text-purple-700">말투 분석: </span>
+              <span className="text-purple-600">{aiAnalysis.tone}</span>
+            </div>
+          )}
+
+          {aiAnalysis.key_points && aiAnalysis.key_points.length > 0 && (
+            <div className="mb-3">
+              <p className="text-sm font-medium text-purple-700 mb-2">핵심 포인트:</p>
+              <ul className="space-y-1">
+                {aiAnalysis.key_points.map((point, index) => (
+                  <li key={index} className="text-sm text-purple-600 flex items-start">
+                    <span className="text-purple-400 mr-2">•</span>
+                    {point}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {aiAnalysis.suggestions && aiAnalysis.suggestions.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-purple-700 mb-2">개선 제안:</p>
+              <ul className="space-y-1">
+                {aiAnalysis.suggestions.map((suggestion, index) => (
+                  <li key={index} className="text-sm text-purple-600 flex items-start">
+                    <span className="text-yellow-500 mr-2">💡</span>
+                    {suggestion}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {aiAnalysis.confidence && (
+            <div className="mt-4 pt-3 border-t border-purple-200">
+              <div className="flex items-center justify-between text-xs text-purple-600">
+                <span>AI 신뢰도</span>
+                <span>{Math.round(aiAnalysis.confidence * 100)}%</span>
+              </div>
+              <div className="w-full bg-purple-200 rounded-full h-1.5 mt-1">
+                <div 
+                  className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${aiAnalysis.confidence * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* AI 오류 메시지 */}
+      {aiAnalysis?.error && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg"
+        >
+          <p className="text-red-700 text-sm">{aiAnalysis.message}</p>
+          {aiAnalysis.suggestions && (
+            <ul className="mt-2 space-y-1">
+              {aiAnalysis.suggestions.map((suggestion, index) => (
+                <li key={index} className="text-red-600 text-xs">• {suggestion}</li>
+              ))}
+            </ul>
+          )}
+        </motion.div>
+      )}
+
+      {/* 테스트용 버튼 - 항상 표시 */}
+      <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+        <p className="text-xs text-blue-700 mb-2">테스트용 (음성 인식이 안 될 때 사용)</p>
+        <div className="space-y-2">
           <button
             onClick={() => {
-              const testText = "안녕하십니까. 저는 테스트 답변을 하고 있습니다."
+              const testText = "안녕하십니까. 저는 창의적 문제해결과 팀워크를 중시하는 지원자입니다. 대학에서 경영학을 전공하며 다양한 프로젝트 경험을 쌓았습니다."
+              console.log('테스트 버튼 클릭됨, 텍스트:', testText)
               setTranscript(testText)
+              setInterimTranscript('')
               onTranscriptChange?.(testText)
+              console.log('onTranscriptChange 호출됨')
             }}
-            className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+            className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 mr-2"
           >
-            테스트 텍스트 추가
+            자기소개 예시 추가
+          </button>
+          <button
+            onClick={() => {
+              setTranscript('')
+              setInterimTranscript('')
+              onTranscriptChange?.('')
+            }}
+            className="px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600"
+          >
+            텍스트 지우기
           </button>
         </div>
-      )}
+      </div>
 
       {/* 실시간 텍스트 변환 결과 */}
       {transcript && (

@@ -66,12 +66,35 @@ export const AuthProvider = ({ children }) => {
 
       if (error) throw error
 
-      // 프로필 생성 (트리거로 자동 생성되지만 이름 업데이트)
+      // 프로필 강제 생성 (트리거가 실행되지 않을 경우 대비)
       if (data.user) {
-        await supabase
+        console.log('회원가입 후 프로필 생성/업데이트 시작')
+        
+        // 프로필 존재 확인 후 생성/업데이트
+        const { data: existingProfile } = await supabase
           .from('profiles')
-          .update({ name: name })
+          .select('*')
           .eq('id', data.user.id)
+          .single()
+
+        if (!existingProfile) {
+          // 프로필이 없으면 생성
+          await supabase
+            .from('profiles')
+            .insert({ 
+              id: data.user.id,
+              email: email,
+              name: name 
+            })
+          console.log('새 프로필 생성 완료')
+        } else {
+          // 프로필이 있으면 이름만 업데이트
+          await supabase
+            .from('profiles')
+            .update({ name: name })
+            .eq('id', data.user.id)
+          console.log('기존 프로필 업데이트 완료')
+        }
       }
 
       return { success: true, data }
@@ -94,6 +117,33 @@ export const AuthProvider = ({ children }) => {
       })
 
       if (error) throw error
+
+      // 로그인 후 프로필 확인 및 생성
+      if (data.user) {
+        console.log('로그인 후 프로필 확인 시작')
+        
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
+
+        if (!existingProfile) {
+          // 프로필이 없으면 생성 (기존 사용자의 경우)
+          console.log('기존 사용자 프로필 생성')
+          await supabase
+            .from('profiles')
+            .insert({ 
+              id: data.user.id,
+              email: data.user.email,
+              name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User'
+            })
+          console.log('프로필 생성 완료')
+        } else {
+          console.log('기존 프로필 확인됨:', existingProfile)
+        }
+      }
+      
       return { success: true, data }
     } catch (error) {
       console.error('로그인 오류:', error)
@@ -128,19 +178,68 @@ export const AuthProvider = ({ children }) => {
 
   // 사용자 프로필 가져오기
   const getUserProfile = async () => {
-    if (!user) return null
+    if (!user) {
+      console.log('getUserProfile: 사용자가 로그인하지 않음')
+      return null
+    }
 
     try {
+      console.log('getUserProfile: 프로필 조회 시작, user.id:', user.id)
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('getUserProfile: Supabase 조회 오류:', error)
+        
+        // 프로필이 없는 경우 (404 에러) 자동으로 생성
+        if (error.code === 'PGRST116' || error.message?.includes('No rows found')) {
+          console.log('getUserProfile: 프로필이 없음, 새로 생성')
+          return await createUserProfileIfNotExists()
+        }
+        
+        throw error
+      }
+
+      console.log('getUserProfile: 성공, 프로필 데이터:', data)
       return data
     } catch (error) {
-      console.error('프로필 조회 오류:', error)
+      console.error('getUserProfile: 전체 오류:', error)
+      console.error('getUserProfile: 오류 상세:', JSON.stringify(error, null, 2))
+      return null
+    }
+  }
+
+  // 프로필이 없는 경우 자동 생성
+  const createUserProfileIfNotExists = async () => {
+    if (!user) return null
+
+    try {
+      console.log('createUserProfileIfNotExists: 프로필 생성 시작')
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          phone: null
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('createUserProfileIfNotExists: 생성 오류:', error)
+        throw error
+      }
+
+      console.log('createUserProfileIfNotExists: 생성 성공:', data)
+      return data
+    } catch (error) {
+      console.error('createUserProfileIfNotExists: 전체 오류:', error)
       return null
     }
   }
@@ -172,7 +271,8 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     getUserProfile,
-    updateUserName
+    updateUserName,
+    createUserProfileIfNotExists
   }
 
   return (

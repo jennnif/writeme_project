@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   email TEXT,
   name TEXT,
+  phone TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -57,57 +58,81 @@ CREATE TABLE IF NOT EXISTS tone_presets (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Row Level Security (RLS) 정책 설정
--- 사용자는 자신의 데이터만 접근 가능
+-- ============== 트리거 함수 ==============
 
--- profiles 테이블
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
-
--- personality_analyses 테이블
-ALTER TABLE personality_analyses ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own analyses" ON personality_analyses FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own analyses" ON personality_analyses FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own analyses" ON personality_analyses FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own analyses" ON personality_analyses FOR DELETE USING (auth.uid() = user_id);
-
--- experiences 테이블
-ALTER TABLE experiences ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own experiences" ON experiences FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own experiences" ON experiences FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own experiences" ON experiences FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own experiences" ON experiences FOR DELETE USING (auth.uid() = user_id);
-
--- generated_documents 테이블
-ALTER TABLE generated_documents ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own documents" ON generated_documents FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own documents" ON generated_documents FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own documents" ON generated_documents FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own documents" ON generated_documents FOR DELETE USING (auth.uid() = user_id);
-
--- tone_presets 테이블
-ALTER TABLE tone_presets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can view own presets" ON tone_presets FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own presets" ON tone_presets FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own presets" ON tone_presets FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own presets" ON tone_presets FOR DELETE USING (auth.uid() = user_id);
-
--- 프로필 자동 생성 함수 (사용자 가입시)
+-- 회원가입 시 자동으로 프로필 생성
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email)
-  VALUES (NEW.id, NEW.email);
+  INSERT INTO public.profiles (id, email, name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'name', 'User')
+  );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
--- 사용자 가입시 프로필 자동 생성 트리거
+-- 새 사용자 생성 시 트리거 실행
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ============== RLS (Row Level Security) 정책 ==============
+
+-- profiles 테이블 RLS 활성화
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE personality_analyses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE experiences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE generated_documents ENABLE ROW LEVEL SECURITY;
+
+-- profiles 정책
+CREATE POLICY "Users can view own profile" ON profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" ON profiles
+  FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile" ON profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- personality_analyses 정책
+CREATE POLICY "Users can view own analyses" ON personality_analyses
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own analyses" ON personality_analyses
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- experiences 정책
+CREATE POLICY "Users can view own experiences" ON experiences
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own experiences" ON experiences
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own experiences" ON experiences
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own experiences" ON experiences
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- generated_documents 정책
+CREATE POLICY "Users can view own documents" ON generated_documents
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own documents" ON generated_documents
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own documents" ON generated_documents
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own documents" ON generated_documents
+  FOR DELETE USING (auth.uid() = user_id);
 
 -- 인덱스 생성 (성능 최적화)
 CREATE INDEX IF NOT EXISTS idx_personality_analyses_user_id ON personality_analyses(user_id);

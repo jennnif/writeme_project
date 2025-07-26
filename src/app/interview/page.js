@@ -17,6 +17,10 @@ export default function InterviewPage() {
   const [aiFeedback, setAiFeedback] = useState(null)
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('all')
+  
+  // Gemini AI 관련 상태
+  const [geminiAnalysis, setGeminiAnalysis] = useState(null)
+  const [useGeminiAI, setUseGeminiAI] = useState(true) // Gemini AI 사용 여부
 
   useEffect(() => {
     // 페이지 로드시 랜덤 질문 표시
@@ -36,14 +40,37 @@ export default function InterviewPage() {
     setShowAnswer(false)
     setShowFeedback(false)
     setAiFeedback(null)
+    setGeminiAnalysis(null) // Gemini 분석 결과도 초기화
   }
 
   const handleTranscriptChange = (transcript) => {
+    console.log('Transcript 변경됨:', transcript)
     setUserAnswer(transcript)
   }
 
   const handleRecordingComplete = (blob) => {
     setAudioBlob(blob)
+  }
+
+  // Gemini AI 분석 결과 처리
+  const handleGeminiAnalysis = (analysis) => {
+    console.log('Gemini 분석 결과 받음:', analysis)
+    setGeminiAnalysis(analysis)
+    
+    // Gemini 결과를 기존 AI 피드백 형태로 변환
+    if (analysis && !analysis.error) {
+      const convertedFeedback = {
+        overall_score: analysis.score || 80,
+        strengths: analysis.key_points || [],
+        improvements: analysis.suggestions || [],
+        specific_feedback: analysis.analysis || '',
+        recommended_structure: currentQuestion?.tips || [],
+        tone_analysis: analysis.tone || '',
+        ai_confidence: analysis.confidence || 0.8
+      }
+      setAiFeedback(convertedFeedback)
+      setShowFeedback(true)
+    }
   }
 
   const generateAIFeedback = async () => {
@@ -254,33 +281,94 @@ ${structureCount >= 1 ? '구조화된 답변으로 이해하기 쉽습니다.' :
               </ul>
             </div>
 
+            {/* AI 엔진 선택 */}
+            <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-purple-900">🤖 AI 엔진 선택</h4>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="aiEngine"
+                      checked={useGeminiAI}
+                      onChange={() => setUseGeminiAI(true)}
+                      className="text-purple-600"
+                    />
+                    <span className="text-sm font-medium text-purple-700">Gemini 2.5 Flash-Lite</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="aiEngine"
+                      checked={!useGeminiAI}
+                      onChange={() => setUseGeminiAI(false)}
+                      className="text-blue-600"
+                    />
+                    <span className="text-sm font-medium text-blue-700">기본 AI</span>
+                  </label>
+                </div>
+              </div>
+              <p className="text-xs text-purple-600">
+                {useGeminiAI 
+                  ? '🚀 실시간 음성 분석과 고급 피드백을 제공합니다' 
+                  : '⚡ 빠른 기본 분석을 제공합니다'
+                }
+              </p>
+            </div>
+
+            {/* 테스트용 수동 입력 - 개발 환경에서만 표시 */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                <p className="text-xs text-gray-700 mb-2">테스트용 수동 입력</p>
+                <textarea
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
+                  placeholder="여기에 답변을 직접 입력하세요..."
+                  className="w-full p-2 border rounded text-sm h-20 text-gray-900"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  현재 답변 길이: {userAnswer.length} | 버튼 활성화: {userAnswer.trim().length > 0 ? '예' : '아니오'}
+                </p>
+              </div>
+            )}
+
             {/* 음성 녹음 */}
             <VoiceRecorder
               onTranscriptChange={handleTranscriptChange}
               onRecordingComplete={handleRecordingComplete}
+              onAIAnalysis={useGeminiAI ? handleGeminiAnalysis : null}
             />
-
-
 
             {/* 버튼들 */}
             <div className="flex flex-wrap gap-3 mt-6">
-              <button
-                onClick={generateAIFeedback}
-                disabled={!userAnswer || userAnswer.trim().length === 0 || isGeneratingFeedback}
-                className="px-6 py-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
-                title={!userAnswer || userAnswer.trim().length === 0 ? '먼저 음성을 녹음해주세요' : 'AI 피드백 받기'}
-              >
-                {isGeneratingFeedback ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    AI 분석 중...
-                  </>
-                ) : (
-                  <>
-                    🤖 AI 피드백 받기
-                  </>
-                )}
-              </button>
+              {!useGeminiAI && (
+                <button
+                  onClick={generateAIFeedback}
+                  disabled={!userAnswer || userAnswer.length < 3 || isGeneratingFeedback}
+                  className="px-6 py-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                  title={!userAnswer || userAnswer.length < 3 ? '최소 3글자 이상 입력해주세요' : 'AI 피드백 받기'}
+                >
+                  {isGeneratingFeedback ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      AI 분석 중...
+                    </>
+                  ) : (
+                    <>
+                      🤖 기본 AI 피드백 받기
+                    </>
+                  )}
+                </button>
+              )}
+
+              {useGeminiAI && userAnswer.length > 0 && (
+                <div className="flex items-center space-x-3 px-4 py-3 bg-purple-100 rounded-xl">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
+                  <span className="text-purple-700 text-sm font-medium">
+                    Gemini AI가 실시간으로 분석 중입니다
+                  </span>
+                </div>
+              )}
               
               <button
                 onClick={() => setShowAnswer(!showAnswer)}

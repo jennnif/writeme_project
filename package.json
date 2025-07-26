@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.52.1",
     "framer-motion": "^12.23.9",
     "next": "15.4.4",
